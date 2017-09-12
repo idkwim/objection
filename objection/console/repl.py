@@ -30,7 +30,8 @@ class PromptStyle(Style):
     def __init__(self) -> None:
         self.style = self._init_style()
 
-    def _init_style(self) -> dict:
+    @staticmethod
+    def _init_style() -> dict:
         """
             Grab the values for the prompt styling.
 
@@ -54,7 +55,7 @@ class PromptStyle(Style):
             Token: '#ff0066',
 
             # Prompt.
-            Token.Devicename: '#ff0000',
+            Token.Applicationname: '#007cff',
             Token.On: '#00aa00',
             Token.Devicetype: '#00ff48',
             Token.Version: '#00ff48',
@@ -97,7 +98,7 @@ class Repl(object):
         device_name, system_name, model, system_version = device_info
 
         self.prompt_tokens = [
-            (Token.Devicename, device_name),
+            (Token.Applicationname, device_name),
             (Token.On, ' on '),
             (Token.Devicetype, '(' + model + ': '),
             (Token.Version, system_version + ') '),
@@ -119,7 +120,7 @@ class Repl(object):
             return self.prompt_tokens
 
         return [
-            (Token.Devicename, 'unknown device'),
+            (Token.Applicationname, 'unknown application'),
             (Token.On, ''),
             (Token.Devicetype, ''),
             (Token.Version, ' '),
@@ -128,7 +129,7 @@ class Repl(object):
 
     def run_command(self, document: str) -> None:
         """
-            Process a command as recevied by prompt_toolkit.
+            Process a command as received by prompt_toolkit.
 
             :param document:
             :return:
@@ -168,7 +169,7 @@ class Repl(object):
         # starts with the word 'help'
         if len(tokens) > 0 and 'help' == tokens[0]:
 
-            # stip the 'help' entry from the tokens list so that
+            # skip the 'help' entry from the tokens list so that
             # the following method can find the correct help
             tokens.remove('help')
             command_help = self._find_command_help(tokens)
@@ -283,7 +284,7 @@ class Repl(object):
                 if 'commands' in dict_to_walk[token]:
                     dict_to_walk = dict_to_walk[token]['commands']
 
-            # stop if we dont have a token that matches anything
+            # stop if we don't have a token that matches anything
             else:
                 break
 
@@ -295,7 +296,7 @@ class Repl(object):
 
             # no helpfile... warn.
             if not os.path.exists(help_file):
-                click.secho('Unable to find helpfile {0}'.format(' '.join(helpfile_name), help_file), dim=True)
+                click.secho('Unable to find helpfile {0}'.format(' '.join(helpfile_name)), dim=True)
 
                 return user_help
 
@@ -337,7 +338,7 @@ class Repl(object):
 
             try:
                 self.set_prompt_tokens(get_device_info())
-                click.secho('Reconnection succesful!', fg='green')
+                click.secho('Reconnection successful!', fg='green')
 
             except frida.ServerNotRunningError as e:
                 click.secho('Failed to reconnect with error: {0}'.format(e), fg='red')
@@ -346,7 +347,7 @@ class Repl(object):
 
         return False
 
-    def start_repl(self) -> None:
+    def start_repl(self, quiet: bool) -> None:
         """
             Start the objection repl.
         """
@@ -362,8 +363,9 @@ class Repl(object):
         by: @leonjza from @sensepost
 """).format(__version__)
 
-        click.secho(banner, bold=True)
-        click.secho('[tab] for command suggestions', fg='white', dim=True)
+        if not quiet:
+            click.secho(banner, bold=True)
+            click.secho('[tab] for command suggestions', fg='white', dim=True)
 
         # the main application loop is here, reading inputs provided by
         # prompt_toolkit and sending it off the the needed handlers
@@ -388,8 +390,17 @@ class Repl(object):
                 if self.handle_reconnect(document):
                     continue
 
-                # find something to run
-                self.run_command(document)
+                # dispatch to the command handler. if something goes horribly
+                # wrong, catch it instead of crashing the REPL
+                try:
+
+                    # find something to run
+                    self.run_command(document)
+
+                except Exception as e:
+                    click.secho(('\n\nAn exception occurred while processing the command. If this '
+                                 'looks like a code related error, please file a bug report!'), fg='red')
+                    click.secho('Error: {0}'.format(e), fg='red', bold=True)
 
             except (KeyboardInterrupt, EOFError):
 

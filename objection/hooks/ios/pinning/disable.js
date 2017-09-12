@@ -16,11 +16,11 @@
 //      decisions to complete the request or cancel it. The hook for this
 //      Class searches for the selector and replaces it one that will
 //      continue regardless of the logic in this method, and apply the
-//      original block as a callback, with a sucessful return.
+//      original block as a callback, with a successful return.
 //
 //  - NSURLConnection.
 //      While an old method, works similar to NSURLSession, except there is
-//      no completionHandler block, so just the sucesful challenge is returned.
+//      no completionHandler block, so just the successful challenge is returned.
 
 // The more 'lower level' stuff is basically a reimplementation of the commonly
 // known 'SSL-Killswitch2'[1], which hooks and replaces lower level certificate validation
@@ -134,7 +134,7 @@ if (ObjC.classes.AFHTTPSessionManager && ObjC.classes.AFSecurityPolicy) {
             }
         });
     }
-};
+}
 
 // NSURLSession
 var search = resolver.enumerateMatchesSync('-[* URLSession:didReceiveChallenge:completionHandler:]');
@@ -148,7 +148,7 @@ if (search.length > 0) {
         data: '[NSURLSession] Found ' + search.length + ' matches for URLSession:didReceiveChallenge:completionHandler:'
     }));
 
-    for (i = 0; i < search.length; i++) {
+    for (var i = 0; i < search.length; i++) {
 
         Interceptor.attach(search[i].address, {
             onEnter: function (args) {
@@ -162,7 +162,6 @@ if (search.length > 0) {
                 // get handlers on some arguments
                 var receiver = new ObjC.Object(args[0]);
                 var selector = ObjC.selectorAsString(args[1]);
-                var session = new ObjC.Object(args[2]);
                 var challenge = new ObjC.Object(args[3]);
 
                 send(JSON.stringify({
@@ -229,7 +228,7 @@ if (search.length > 0) {
         data: '[NSURLConnection] Found ' + search.length + ' matches for connection:willSendRequestForAuthenticationChallenge:'
     }));
 
-    for (i = 0; i < search.length; i++) {
+    for (var i = 0; i < search.length; i++) {
 
         Interceptor.replace(search[i].address, new NativeCallback(function (a, b, connection, challenge) {
 
@@ -254,7 +253,7 @@ send(JSON.stringify({
 // iOS9 and below
 
 // Some constants
-var errSSLServerAuthCompvared = -9481;
+var errSSLServerAuthCompared = -9481;
 var kSSLSessionOptionBreakOnServerAuth = 0;
 var noErr = 0;
 var errSecSuccess = 0;
@@ -318,7 +317,7 @@ Interceptor.replace(SSLHandshake, new NativeCallback(function (context) {
 
     var result = SSLHandshake(context);
 
-    if (result === errSSLServerAuthCompvared) {
+    if (result === errSSLServerAuthCompared) {
 
         return SSLHandshake(context);
     } else {

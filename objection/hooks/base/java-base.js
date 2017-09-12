@@ -5,7 +5,7 @@ if (Java.available) {
         // From Frida documentation:
         //  "ensure that the current thread is attached to the VM and call fn"
         //
-        // We also handle the exception that could happen within the callcack as
+        // We also handle the exception that could happen within the callback as
         // it does not seem to bubble outside of it.
         Java.perform(function () {
 
@@ -20,7 +20,7 @@ if (Java.available) {
                     error_reason: err.message,
                     type: 'java-perform-exception',
                     data: {}
-                }
+                };
 
                 send(JSON.stringify(response));
             }
@@ -33,7 +33,7 @@ if (Java.available) {
             error_reason: err.message,
             type: 'global-exception',
             data: {}
-        }
+        };
 
         send(JSON.stringify(response));
     }
@@ -45,7 +45,7 @@ if (Java.available) {
         error_reason: 'Java runtime is not available.',
         type: 'global-exception',
         data: {}
-    }
+    };
 
     send(JSON.stringify(response));
 }

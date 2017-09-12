@@ -1,4 +1,4 @@
-// Dumps all of the entires stored in NSUserDefaults.
+// Dumps all of the entries stored in NSUserDefaults.
 
 var NSUserDefaults = ObjC.classes.NSUserDefaults;
 
@@ -9,7 +9,7 @@ var response = {
     error_reason: NaN,
     type: 'nsuserdefaults-get',
     data: data.toString() 
-}
+};
 
 send(JSON.stringify(response));
 

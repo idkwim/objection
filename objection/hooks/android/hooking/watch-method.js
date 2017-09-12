@@ -3,7 +3,6 @@
 // is also watched.
 
 var target_class = Java.use('{{ target_class }}');
-var target_method = '{{ target_method }}';
 var overload_count = eval('target_class.{{ target_method }}.overloads.length');
 
 send(JSON.stringify({
@@ -14,7 +13,7 @@ send(JSON.stringify({
 }));
 
 // Hook all of the overloads found for this class.method
-for (i = 0; i < overload_count; i++) {
+for (var i = 0; i < overload_count; i++) {
 
     send(JSON.stringify({
         status: 'success',

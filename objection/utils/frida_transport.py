@@ -12,6 +12,7 @@ from jinja2 import Template
 from ..state.app import app_state
 from ..state.connection import state_connection
 from ..state.jobs import job_manager_state
+from ..utils.templates import template_env
 
 
 class RunnerMessage(object):
@@ -97,7 +98,7 @@ class RunnerMessage(object):
 
 class FridaJobRunner(object):
     """
-        Jobs that need to be continously running
+        Jobs that need to be continuously running
         are represented by an instance of this class
     """
 
@@ -229,6 +230,10 @@ class FridaRunner(object):
         if not hook:
             hook = self.hook
 
+        # perform a final compile of the hook, processing any
+        # remaining expressions and statements
+        hook = template_env.from_string(hook).render()
+
         # cleanup any comments
         hook = '\n'.join([line for line in hook.splitlines() if not line.strip().startswith('//')])
 
@@ -250,7 +255,8 @@ class FridaRunner(object):
 
         return self.messages[-1]
 
-    def get_session(self):
+    @staticmethod
+    def get_session():
         """
             Attempt to get a Frida session.
         """
@@ -303,7 +309,7 @@ class FridaRunner(object):
 
     def run(self, hook: str = None) -> None:
         """
-            Run a hook syncronously and unload once finished.
+            Run a hook synchronously and unload once finished.
 
             :param hook:
             :return:
@@ -349,7 +355,7 @@ class FridaRunner(object):
         # attempt to load the hook. external scripts are also
         # loaded (with the import command) and may have some severe
         # syntax errors etc. to cater for this we wrap the load in
-        # a try catch to ensure we dont crash the repl
+        # a try catch to ensure we don't crash the repl
         try:
 
             job.script = job.session.create_script(self._hook_processor(job.hook))

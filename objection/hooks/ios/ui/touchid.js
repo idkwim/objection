@@ -1,8 +1,8 @@
-// Attempts to 'bypass' TouchID by responding with a successfull
+// Attempts to 'bypass' TouchID by responding with a successful
 // operating system response to evaluatePolicy.
 
 var resolver = new ApiResolver('objc');
-var LAContext_evaluatePolicy_localizedReason_reply = {}
+var LAContext_evaluatePolicy_localizedReason_reply = {};
 
 resolver.enumerateMatches('-[LAContext evaluatePolicy:localizedReason:reply:]', {
     onMatch: function (match) {

@@ -47,7 +47,7 @@ SSLContext_init.implementation = function (keyManager, trustManager, secureRando
     }));
 
     SSLContext_init.call(this, keyManager, TrustManagers, secureRandom);
-}
+};
 
 // OkHTTP v3.x
 
@@ -69,7 +69,7 @@ try {
 
 } catch (err) {
 
-    // could not find the class. thats ok.
+    // could not find the class. that's ok.
     if (err.message.indexOf('java.lang.ClassNotFoundException') !== -1) {
         return;
     }

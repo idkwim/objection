@@ -1,7 +1,5 @@
 var File = Java.use('java.io.File');
 var String = Java.use('java.lang.String');
-var Date = Java.use('java.util.Date');
-var SimpleDateFormat = Java.use('java.text.SimpleDateFormat');
 
 // get a string of the path to work with
 var path = String.$new('{{ path }}');
@@ -22,12 +20,12 @@ var data = {
     readable: Boolean(readable),
     writable: Boolean(writable),
     files: {}
-}
+};
 
 // if we can read the directory, process the files.
 if (Boolean(readable)) {
 
-    for (i = 0; i < files.length; i++) {
+    for (var i = 0; i < files.length; i++) {
 
         // reference a specific file. This will be an instance
         // of java.io.File already
@@ -42,9 +40,9 @@ if (Boolean(readable)) {
                 isFile: file.isFile(),
                 isHidden: file.isHidden(),
                 lastModified: file.lastModified(),
-                size: file.length(),
+                size: file.length()
             }
-        }
+        };
 
         data.files[file.getName()] = file_data;
 
@@ -56,7 +54,7 @@ var response = {
     error_reason: NaN,
     type: 'list-directory-contents',
     data: data
-}
+};
 
 send(JSON.stringify(response));
 

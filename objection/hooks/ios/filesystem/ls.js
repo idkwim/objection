@@ -1,7 +1,6 @@
 // Obtains a directory listing for a specified path.
 
 var NSFileManager = ObjC.classes.NSFileManager;
-var NSBundle = ObjC.classes.NSBundle;
 var NSString = ObjC.classes.NSString;
 
 // get a file manager instance to work with
@@ -20,13 +19,13 @@ var data = {
     readable: Boolean(readable),
     writable: Boolean(writable),
     files: {}
-}
+};
 
 // if we can read the directory, get each files attributes
 if (Boolean(readable)) {
 
     // get the directory listing
-    var contents = fm.contentsOfDirectoryAtPath_error_(path, NULL)
+    var contents = fm.contentsOfDirectoryAtPath_error_(path, NULL);
 
     // file count
     var count = contents.count();
@@ -42,10 +41,10 @@ if (Boolean(readable)) {
             readable: NaN,
             writable: NaN,
             attributes: {}
-        }
+        };
 
         // generate a full path to the file
-        var item_path = NSString.stringWithString_(path + '/' + file)
+        var item_path = NSString.stringWithString_(path + '/' + file);
 
         // check read / write
         file_data.readable = fm.isReadableFileAtPath_(item_path);
@@ -82,7 +81,7 @@ var response = {
     error_reason: NaN,
     type: 'list-directory-contents',
     data: data
-}
+};
 
 send(JSON.stringify(response));
 

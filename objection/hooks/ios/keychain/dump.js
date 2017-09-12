@@ -2,14 +2,15 @@
 // application.
 
 var NSMutableDictionary = ObjC.classes.NSMutableDictionary;
-var NSArray = ObjC.classes.NSArray;
 var NSString = ObjC.classes.NSString;
-var NSKeyedUnarchiver = ObjC.classes.NSKeyedUnarchiver;
 
 // Ref: http://nshipster.com/bool/
 var kCFBooleanTrue = ObjC.classes.__NSCFBoolean.numberWithBool_(true);
 var SecItemCopyMatching = new NativeFunction(
     ptr(Module.findExportByName('Security', 'SecItemCopyMatching')), 'pointer', ['pointer', 'pointer']);
+var SecAccessControlGetConstraints = new NativeFunction(
+    ptr(Module.findExportByName('Security', 'SecAccessControlGetConstraints')),
+    'pointer', ['pointer']);
 
 // constants
 var kSecReturnAttributes = 'r_Attributes',
@@ -90,8 +91,8 @@ var kSecConstantReverse = {
     'dk': 'kSecAttrAccessibleAlways',
     'aku': 'kSecAttrAccessibleWhenUnlockedThisDeviceOnly',
     'cku': 'kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly',
-    'dku': 'kSecAttrAccessibleAlwaysThisDeviceOnly',
-}
+    'dku': 'kSecAttrAccessibleAlwaysThisDeviceOnly'
+};
 
 // the base query dictionary to use for the keychain lookups
 var search_dictionary = NSMutableDictionary.alloc().init();
@@ -106,7 +107,7 @@ var item_classes = [
     kSecClassIdentity,
     kSecClassCertificate,
     kSecClassGenericPassword,
-    kSecClassInternetPassword,
+    kSecClassInternetPassword
 ];
 
 // get the string representation of some data
@@ -143,10 +144,93 @@ function odas(raw_data) {
     }
 }
 
+// Decode the access control attributes on a keychain
+// entry into a human readable string. Getting an idea of what the
+// constriants actually are is done using an undocumented method,
+// SecAccessControlGetConstraints.
+function decode_acl(entry) {
+
+    // No access control? Move along.
+    if (!entry.containsKey_(kSecAttrAccessControl)) {
+        return '';
+    }
+
+    var access_controls = ObjC.Object(
+        SecAccessControlGetConstraints(entry.objectForKey_(kSecAttrAccessControl)));
+
+    // Ensure we were able to get the SecAccessControlRef
+    if (access_controls.handle == 0x00) {
+        return '';
+    }
+
+    var flags = [];
+    var access_control_enumerator = access_controls.keyEnumerator();
+    var access_control_item_key;
+
+    while ((access_control_item_key = access_control_enumerator.nextObject()) !== null) {
+
+        var access_control_item = access_controls.objectForKey_(access_control_item_key);
+
+        switch (odas(access_control_item_key)) {
+
+            // Defaults?
+            case 'dacl':
+                break;
+
+            case 'osgn':
+                flags.push['PrivateKeyUsage'];
+
+            case 'od':
+                var constraints = access_control_item;
+                var constraint_enumerator = constraints.keyEnumerator();
+                var constraint_item_key;
+
+                while ((constraint_item_key = constraint_enumerator.nextObject()) !== null) {
+
+                    switch (odas(constraint_item_key)) {
+                        case 'cpo':
+                            flags.push('kSecAccessControlUserPresence');
+                            break;
+
+                        case 'cup':
+                            flags.push('kSecAccessControlDevicePasscode');
+                            break;
+
+                        case 'pkofn':
+                            constraints.objectForKey_('pkofn') == 1 ?
+                                flags.push('Or') :
+                                flags.push('And');
+                            break;
+
+                        case 'cbio':
+                            constraints.objectForKey_('cbio').count() == 1 ?
+                                flags.push('kSecAccessControlTouchIDAny') :
+                                flags.push('kSecAccessControlTouchIDCurrentSet');
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+
+                break;
+
+            case 'prp':
+                flags.push('ApplicationPassword');
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    return flags.join(' ');
+}
+
 // helper to lookup the constant name of a constant value
 function get_constant_for_value(v) {
 
-    for (k in kSecConstantReverse) {
+    for (var k in kSecConstantReverse) {
         if (k == v) {
             return kSecConstantReverse[v];
         }
@@ -158,7 +242,7 @@ function get_constant_for_value(v) {
 // a list of keychain items that will return 
 var keychain_items = [];
 
-for (item_class_index in item_classes) {
+for (var item_class_index in item_classes) {
 
     var item_class = item_classes[item_class_index];
 
@@ -186,7 +270,7 @@ for (item_class_index in item_classes) {
         for (var i = 0; i < search_results.count(); i++) {
 
             // the *actual* keychain item is here!
-            search_result = search_results.objectAtIndex_(i);
+            var search_result = search_results.objectAtIndex_(i);
 
             // dumped entries from NSLog() look like
             // 2017-06-20 11:25:07.645 PewPew[51023:7644106] {
@@ -243,8 +327,6 @@ for (item_class_index in item_classes) {
             // agrp	kSecAttrAccessGroup	Keychain access group
             // pdmn	kSecAttrAccessible	Access restrictions (Data protection classes)
 
-            // TODO: Decode accc (eg: kSecAccessControlTouchIDCurrentSet)
-
             var keychain_entry = {
                 'item_class': get_constant_for_value(item_class),
                 'create_date': odas(search_result.objectForKey_(kSecAttrCreationDate)),
@@ -259,14 +341,14 @@ for (item_class_index in item_classes) {
                 'negative': odas(search_result.objectForKey_(kSecAttrIsNegative)),
                 'custom_icon': odas(search_result.objectForKey_(kSecAttrHasCustomIcon)),
                 'protected': odas(search_result.objectForKey_(kSecProtectedDataItemAttr)),
-                'access_control': odas(search_result.objectForKey_(kSecAttrAccessControl)),
+                'access_control': decode_acl(search_result),
                 'accessible_attribute': get_constant_for_value(odas(search_result.objectForKey_(kSecAttrAccessible))),
                 'entitlement_group': odas(search_result.objectForKey_(kSecAttrAccessGroup)),
                 'generic': odas(search_result.objectForKey_(kSecAttrGeneric)),
                 'service': odas(search_result.objectForKey_(kSecAttrService)),
                 'account': odas(search_result.objectForKey_(kSecAttrAccount)),
                 'label': odas(search_result.objectForKey_(kSecAttrLabel)),
-                'data': odas(search_result.objectForKey_('v_Data')),
+                'data': odas(search_result.objectForKey_('v_Data'))
             };
 
             keychain_items.push(keychain_entry);
@@ -279,7 +361,7 @@ var response = {
     error_reason: NaN,
     type: 'ios-keychaindump',
     data: keychain_items
-}
+};
 
 send(JSON.stringify(response));
 

@@ -7,21 +7,8 @@ var Runtime = Java.use('java.lang.Runtime');
 var IOException = Java.use('java.io.IOException');
 var File = Java.use('java.io.File');
 
-var common_paths = [
-    '/data/local/bin/su',
-    '/data/local/su',
-    '/data/local/xbin/su',
-    '/dev/com.koushikdutta.superuser.daemon/',
-    '/sbin/su',
-    '/system/app/Superuser.apk',
-    '/system/bin/failsafe/su',
-    '/system/bin/su',
-    '/system/etc/init.d/99SuperSUDaemon',
-    '/system/sd/xbin/su',
-    '/system/xbin/busybox',
-    '/system/xbin/daemonsu',
-    '/system/xbin/su',
-];
+// Get the common_paths for Android
+//jinja: include 'android/root/_common_paths.js'
 
 // 'test-keys' check.
 String.contains.implementation = function (check) {
@@ -40,7 +27,7 @@ String.contains.implementation = function (check) {
 
     // call the original method
     this.contains.apply(this, arguments);
-}
+};
 
 // exec check for su command.
 Runtime.exec.overload('java.lang.String').implementation = function (command) {
@@ -51,7 +38,7 @@ Runtime.exec.overload('java.lang.String').implementation = function (command) {
             status: 'success',
             error_reason: NaN,
             type: 'root-bypass',
-            data: 'Check for su detected with command \'' + command + '\'. Throwing an IOExeption.'
+            data: 'Check for su detected with command \'' + command + '\'. Throwing an IOException.'
         }));
 
         throw IOException.$new('anti-root');
@@ -59,9 +46,9 @@ Runtime.exec.overload('java.lang.String').implementation = function (command) {
 
     // call the original method
     this.contains.apply(this, arguments);
-}
+};
 
-// file existance checks.
+// file existence checks.
 File.exists.implementation = function () {
 
     // grab the filename we are working with
@@ -82,4 +69,4 @@ File.exists.implementation = function () {
 
     // call the original method
     this.contains.apply(this, arguments);
-}
+};

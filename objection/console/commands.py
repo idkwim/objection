@@ -5,9 +5,11 @@ from ..commands import jobs
 from ..commands import memory
 from ..commands import sqlite
 from ..commands import ui
+from ..commands.android import clipboard
 from ..commands.android import command
 from ..commands.android import hooking as android_hooking
 from ..commands.android import intents
+from ..commands.android import keystore
 from ..commands.android import pinning as android_pinning
 from ..commands.android import root
 from ..commands.ios import cookies
@@ -19,8 +21,6 @@ from ..commands.ios import pasteboard
 from ..commands.ios import pinning as ios_pinning
 from ..commands.ios import plist
 from ..utils.helpers import list_current_jobs
-from ..utils.helpers import list_files_in_current_fm_directory
-from ..utils.helpers import list_folders_in_current_fm_directory
 
 # commands are defined with their name being the key, then optionally
 # have a meta, dynamic and commands key.
@@ -52,7 +52,7 @@ COMMANDS = {
 
     'cd': {
         'meta': 'Change the current working directory',
-        'dynamic': list_folders_in_current_fm_directory,
+        'dynamic': filemanager.list_folders_in_current_fm_directory,
         'exec': filemanager.cd
     },
 
@@ -80,7 +80,7 @@ COMMANDS = {
             },
             'download': {
                 'meta': 'Download a file',
-                'dynamic': list_files_in_current_fm_directory,
+                'dynamic': filemanager.list_files_in_current_fm_directory,
                 'exec': filemanager.download
             }
         }
@@ -146,6 +146,7 @@ COMMANDS = {
     },
 
     # sqlite commands
+
     'sqlite': {
         'meta': 'Work with SQLite databases',
         'commands': {
@@ -156,7 +157,7 @@ COMMANDS = {
 
             'connect': {
                 'meta': 'Connect to a SQLite database (file)',
-                'dynamic': list_files_in_current_fm_directory,
+                'dynamic': filemanager.list_files_in_current_fm_directory,
                 'exec': sqlite.connect
             },
             'disconnect': {
@@ -184,6 +185,7 @@ COMMANDS = {
     },
 
     # jobs commands
+
     'jobs': {
         'meta': 'Work with objection jobs',
         'commands': {
@@ -200,6 +202,7 @@ COMMANDS = {
     },
 
     # generic ui commands
+
     'ui': {
         'meta': 'Generic user interface commands',
         'commands': {
@@ -211,6 +214,7 @@ COMMANDS = {
     },
 
     # android commands
+
     'android': {
         'meta': 'Commands specific to Android',
         'commands': {
@@ -247,7 +251,7 @@ COMMANDS = {
                         }
                     },
                     'watch': {
-                        'meta': 'Watch for Android Java incovations',
+                        'meta': 'Watch for Android Java invocations',
                         'commands': {
                             'class_method': {
                                 'meta': 'Watches for invocations of a specific class method',
@@ -267,8 +271,39 @@ COMMANDS = {
                                 'exec': android_hooking.set_method_return_value
                             }
                         }
+                    },
+                    'search': {
+                        'meta': 'Search for various classes and or methods',
+                        'commands': {
+                            'classes': {
+                                'meta': 'Search for Java classes matching a name',
+                                'exec': android_hooking.search_class
+                            }
+                        }
                     }
                 },
+            },
+            'keystore': {
+                'meta': 'Commands to work with the Android KeyStore',
+                'commands': {
+                    'list': {
+                        'meta': 'Lists entries in the Android KeyStore',
+                        'exec': keystore.entries
+                    },
+                    'clear': {
+                        'meta': 'Clears the Android KeyStore',
+                        'exec': keystore.clear
+                    }
+                }
+            },
+            'clipboard': {
+                'meta': 'Work with the Android Clipboard',
+                'commands': {
+                    'monitor': {
+                        'meta': 'Monitor the Android Clipboard',
+                        'exec': clipboard.monitor
+                    }
+                }
             },
             'intent': {
                 'meta': 'Commands to work with Android intents',
@@ -296,11 +331,20 @@ COMMANDS = {
                 'meta': 'Work with Android SSL pinning',
                 'commands': {
                     'disable': {
-                        'meta': 'Attempt to disable SSL pinning in various Javav libraries/classes',
+                        'meta': 'Attempt to disable SSL pinning in various Java libraries/classes',
                         'exec': android_pinning.android_disable
                     }
                 }
-            }
+            },
+            'ui': {
+                'meta': 'Android user interface commands',
+                'commands': {
+                    'screenshot': {
+                        'meta': 'Screenshot the current Activity',
+                        'exec': ui.android_screenshot
+                    },
+                }
+            },
         },
     },
 
@@ -326,7 +370,7 @@ COMMANDS = {
                 'commands': {
                     'cat': {
                         'meta': 'Cat a plist',
-                        'dynamic': list_files_in_current_fm_directory,
+                        'dynamic': filemanager.list_files_in_current_fm_directory,
                         'exec': plist.cat
                     }
                 }
@@ -413,8 +457,21 @@ COMMANDS = {
                         'meta': 'Set various values',
                         'commands': {
                             'return_value': {
-                                'meta': 'Set a methods return value. Supports only boolean returns.',
+                                'meta': 'Set a methods return value. Supports only boolean returns',
                                 'exec': ios_hooking.set_method_return_value
+                            }
+                        }
+                    },
+                    'search': {
+                        'meta': 'Search for various classes and or methods',
+                        'commands': {
+                            'classes': {
+                                'meta': 'Search for Objective-C classes matching a name',
+                                'exec': ios_hooking.search_class
+                            },
+                            'methods': {
+                                'meta': 'Search for Objective-C method matching a name',
+                                'exec': ios_hooking.search_method
                             }
                         }
                     }

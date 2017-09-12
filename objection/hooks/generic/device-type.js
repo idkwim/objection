@@ -11,7 +11,7 @@ if (ObjC.available) {
             device_type: 'ios',
             frida_version: Frida.version
         }
-    }
+    };
 
     send(JSON.stringify(response));
 
@@ -25,7 +25,7 @@ if (ObjC.available) {
             device_type: 'android',
             frida_version: Frida.version
         }
-    }
+    };
 
     send(JSON.stringify(response));
 
@@ -36,9 +36,9 @@ if (ObjC.available) {
         error_reason: 'Unknown Platform',
         type: 'device-type-enumeration',
         data: {
-            device_type: 'unknown',
+            device_type: 'unknown'
         }
-    }
+    };
 
     send(JSON.stringify(response));
 }

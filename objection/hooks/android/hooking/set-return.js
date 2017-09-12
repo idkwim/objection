@@ -6,7 +6,7 @@ send(JSON.stringify({
     status: 'success',
     error_reason: NaN,
     type: 'set-return-value',
-    data: 'Found instace of: {{ class_name }}. Hooking {{ method_name }}...'
+    data: 'Found instance of: {{ class_name }}. Hooking {{ method_name }}...'
 }));
 
 eval('target_class.{{ method_name }}').implementation = function () {
@@ -19,4 +19,4 @@ eval('target_class.{{ method_name }}').implementation = function () {
     }));
 
     return '{{ retval }}' == 'True' ? true : false
-}
+};

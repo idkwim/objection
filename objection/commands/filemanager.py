@@ -11,6 +11,11 @@ from ..utils.frida_transport import FridaRunner
 from ..utils.helpers import sizeof_fmt
 from ..utils.templates import ios_hook, android_hook
 
+# variable used to cache entries from the ls-like
+# commands used in the below helpers. only used
+# by the _get_short_*_listing methods.
+_ls_cache = {}
+
 
 def cd(args: list) -> None:
     """
@@ -62,7 +67,7 @@ def cd(args: list) -> None:
         # assume the path does not exist by default
         does_exist = False
 
-        # check for existance based on the runtime
+        # check for existence based on the runtime
         if device_state.device_type == 'ios':
             does_exist = _path_exists_ios(path)
 
@@ -90,7 +95,7 @@ def cd(args: list) -> None:
         # assume the proposed_path does not exist by default
         does_exist = False
 
-        # check for existance based on the runtime
+        # check for existence based on the runtime
         if device_state.device_type == 'ios':
             does_exist = _path_exists_ios(proposed_path)
 
@@ -202,7 +207,7 @@ def _pwd_ios() -> str:
     return response.cwd
 
 
-def _pwd_android() -> None:
+def _pwd_android() -> str:
     """
         Execute a Frida hook that gets the current working
         directory from an Android device.
@@ -235,7 +240,7 @@ def ls(args: list) -> None:
         :return:
     """
 
-    # check if we have recevied a path to ls for.
+    # check if we have received a path to ls for.
     if len(args) <= 0:
         path = pwd()
     else:
@@ -276,21 +281,6 @@ def _ls_ios(path: str) -> None:
     # get the response data itself
     data = response.data
 
-    # output display
-    if data['readable']:
-
-        click.secho('Read Access', fg='green')
-
-    else:
-        click.secho('No Read Access', fg='red')
-
-    if data['writable']:
-
-        click.secho('Write Access', fg='green')
-
-    else:
-        click.secho('No Write Access', fg='red')
-
     def _get_key_if_exists(attribs, key):
         """
             Small helper to grab keys where some may or may
@@ -317,7 +307,7 @@ def _ls_ios(path: str) -> None:
 
         return sizeof_fmt(int(size)) if size != 'n/a' else 'n/a'
 
-    # if the directory was readable, dump the filesytem listing
+    # if the directory was readable, dump the filesystem listing
     # and attributes to screen.
     if data['readable']:
 
@@ -327,8 +317,10 @@ def _ls_ios(path: str) -> None:
             attributes = file_data['attributes']
 
             table_data.append([
-                _get_key_if_exists(attributes, 'NSFileType'),
+                _get_key_if_exists(attributes, 'NSFileType').replace('NSFileType', ''),
                 _get_key_if_exists(attributes, 'NSFilePosixPermissions'),
+
+                _get_key_if_exists(attributes, 'NSFileProtectionKey').replace('NSFileProtection', ''),
 
                 # read / write permissions
                 file_data['readable'],
@@ -348,7 +340,22 @@ def _ls_ios(path: str) -> None:
             ])
 
         click.secho(tabulate(table_data,
-                             headers=['Type', 'Perms', 'Read', 'Write', 'Owner', 'Group', 'Size', 'Creation', 'Name']))
+                             headers=['NSFileType', 'Perms', 'NSFileProtection', 'Read',
+                                      'Write', 'Owner', 'Group', 'Size', 'Creation', 'Name']))
+
+    # handle the permissions summary for this directory
+    permissions = {
+        'readable': 'No',
+        'writable': 'No'
+    }
+
+    if data['readable']:
+        permissions['readable'] = 'Yes'
+
+    if data['writable']:
+        permissions['writable'] = 'Yes'
+
+    click.secho('\nReadable: {0}  Writable: {0}'.format(permissions['readable'], permissions['writable']), bold=True)
 
 
 def _ls_android(path: str) -> None:
@@ -375,21 +382,6 @@ def _ls_android(path: str) -> None:
     # get the response data itself
     data = response.data
 
-    # output display
-    if data['readable']:
-
-        click.secho('Read Access', fg='green')
-
-    else:
-        click.secho('No Read Access', fg='red')
-
-    if data['writable']:
-
-        click.secho('Write Access', fg='green')
-
-    else:
-        click.secho('No Write Access', fg='red')
-
     def _timestamp_to_str(stamp: str) -> str:
         """
             Small helper method to convert the timestamps we get
@@ -407,7 +399,7 @@ def _ls_android(path: str) -> None:
 
         return 'n/a'
 
-    # if the directory was readable, dump the filesytem listing
+    # if the directory was readable, dump the filesystem listing
     # and attributes to screen.
     if data['readable']:
 
@@ -434,6 +426,20 @@ def _ls_android(path: str) -> None:
         click.secho(tabulate(table_data,
                              headers=['Type', 'Last Modified', 'Read', 'Write', 'Hidden', 'Size', 'Name']))
 
+    # handle the permissions summary for this directory
+    permissions = {
+        'readable': 'No',
+        'writable': 'No'
+    }
+
+    if data['readable']:
+        permissions['readable'] = 'Yes'
+
+    if data['writable']:
+        permissions['writable'] = 'Yes'
+
+    click.secho('\nReadable: {0}  Writable: {0}'.format(permissions['readable'], permissions['writable']), bold=True)
+
 
 def download(args: list) -> None:
     """
@@ -441,7 +447,7 @@ def download(args: list) -> None:
         it locally.
 
         This method is simply a proxy to the actual download methods
-        used for the appopriate environment.
+        used for the appropriate environment.
 
         :param args:
         :return:
@@ -728,3 +734,168 @@ def _upload_android(path: str, destination: str) -> None:
         return
 
     click.secho('Uploaded: {0}'.format(destination), dim=True)
+
+
+def _get_short_ios_listing() -> list:
+    """
+        Get a shortened file and directory listing for
+        iOS devices.
+
+        :return:
+    """
+
+    # default to the pwd. this method is for tab
+    # completions anyways.
+    directory = pwd()
+
+    # the response for this directory
+    resp = []
+
+    # check our cheap cache if we have a listing
+    if directory in _ls_cache:
+        return _ls_cache[directory]
+
+    # fetch a fresh listing
+    runner = FridaRunner()
+    runner.set_hook_with_data(ios_hook('filesystem/ls'), path=directory)
+    runner.run()
+
+    response = runner.get_last_message()
+
+    if not response.is_successful():
+        # cache an empty response as an error occurred
+        _ls_cache[directory] = resp
+
+        return resp
+
+    # loop the response, marking entries as either being
+    # a file or a directory. this response will be stored
+    # in the _ls_cache too.
+    for name, attribs in response.data['files'].items():
+
+        # attributes key contains the type
+        attributes = attribs['attributes']
+
+        # if the attributes dict does not have the file type,
+        # just continue as we cant be sure what it is.
+        if 'NSFileType' not in attributes:
+            continue
+
+        # append a tuple with name, type
+        resp.append((name, 'directory' if attributes['NSFileType'] == 'NSFileTypeDirectory' else 'file'))
+
+    # cache the response so its faster next time!
+    _ls_cache[directory] = resp
+
+    # grab the output lets seeeeee
+    return resp
+
+
+def _get_short_android_listing() -> list:
+    """
+        Get a shortened file and directory listing for
+        Android devices.
+
+        :return:
+    """
+
+    # default to the pwd. this method is for tab
+    # completions anyways.
+    directory = pwd()
+
+    # the response for this directory
+    resp = []
+
+    # check our cheap cache if we have a listing
+    if directory in _ls_cache:
+        return _ls_cache[directory]
+
+    # fetch a fresh listing
+    runner = FridaRunner()
+    runner.set_hook_with_data(android_hook('filesystem/ls'), path=directory)
+    runner.run()
+
+    response = runner.get_last_message()
+
+    if not response.is_successful():
+        # cache an empty response as an error occurred
+        _ls_cache[directory] = resp
+
+        return resp
+
+    # loop the response, marking entries as either being
+    # a file or a directory. this response will be stored
+    # in the _ls_cache too.
+    for name, attribs in response.data['files'].items():
+        attributes = attribs['attributes']
+
+        # append a tuple with name, type
+        resp.append((name, 'directory' if attributes['isDirectory'] else 'file'))
+
+    # cache the response so its faster next time!
+    _ls_cache[directory] = resp
+
+    # grab the output lets seeeeee
+    return resp
+
+
+def list_folders_in_current_fm_directory() -> dict:
+    """
+        Return folders in the current working directory of the
+        Frida attached device.
+    """
+
+    resp = {}
+
+    # get the folders based on the runtime
+    if device_state.device_type == 'ios':
+        response = _get_short_ios_listing()
+
+    elif device_state.device_type == 'android':
+        response = _get_short_android_listing()
+
+    # looks like we landed in an unknown runtime.
+    # just return.
+    else:
+        return resp
+
+    # loop the response to get entries for the 'directory'
+    # type.
+    for entry in response:
+        file_name, file_type = entry
+
+        if file_type == 'directory':
+            resp[file_name] = file_name
+
+    return resp
+
+
+def list_files_in_current_fm_directory() -> dict:
+    """
+        Return files in the current working directory of the
+        Frida attached device.
+    """
+
+    resp = {}
+
+    # check for existence based on the runtime
+    if device_state.device_type == 'ios':
+        response = _get_short_ios_listing()
+
+    elif device_state.device_type == 'android':
+        response = _get_short_android_listing()
+
+    # looks like we landed in an unknown runtime.
+    # just return.
+    else:
+        return resp
+
+    # loop the response to get entries for the 'directory'
+    # type.
+    for entry in response:
+        file_name, file_type = entry
+
+        if file_type == 'file':
+            resp[file_name] = file_name
+
+    return resp

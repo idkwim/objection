@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import xml.etree.ElementTree as ElementTree
 import zipfile
+from subprocess import list2cmdline
 
 import click
 import delegator
@@ -149,6 +150,9 @@ class BasePlatformGadget(object):
 class BasePlatformPatcher(object):
     """ Base class with methods used by any platform patcher. """
 
+    # extended classes should fill this property
+    required_commands = {}
+
     def __init__(self):
 
         # check dependencies
@@ -165,9 +169,9 @@ class BasePlatformPatcher(object):
 
         for cmd, attributes in self.required_commands.items():
 
-            location = delegator.run('which {0}'.format(cmd)).out.strip()
+            location = shutil.which(cmd)
 
-            if len(location) <= 0:
+            if location is None:
                 click.secho('Unable to find {0}. Install it with: {1} before continuing.'.format(
                     cmd, attributes['installation']), fg='red', bold=True)
 
@@ -380,13 +384,17 @@ class IosPatcher(BasePlatformPatcher):
             _, decoded_location = tempfile.mkstemp('decoded_provision')
 
             # Decode the mobile provision using macOS's security cms tool
-            delegator.run(
-                '{0} cms -D -i {1} > {2}'.format(
+            delegator.run(list2cmdline(
+                [
                     self.required_commands['security']['location'],
+                    'cms',
+                    '-D',
+                    '-i',
                     pf,
+                    '-o',
                     decoded_location
-                ), timeout=self.command_run_timeout
-            )
+                ]
+            ), timeout=self.command_run_timeout)
 
             # read the expiration date from the profile
             with open(decoded_location, 'rb') as f:
@@ -490,15 +498,15 @@ class IosPatcher(BasePlatformPatcher):
         shutil.copyfile(frida_gadget, os.path.join(self.app_folder, 'Frameworks', 'FridaGadget.dylib'))
 
         # patch the app binary
-        load_library_output = delegator.run(
-            '{0} {1} {2} {3} "{4}"'.format(
+        load_library_output = delegator.run(list2cmdline(
+            [
                 self.required_commands['insert_dylib']['location'],
                 '--strip-codesig',
                 '--inplace',
                 '@executable_path/Frameworks/FridaGadget.dylib',
-                self.app_binary),
-            timeout=self.command_run_timeout
-        )
+                self.app_binary
+            ]
+        ), timeout=self.command_run_timeout)
 
         # check if the insert_dylib call may have failed
         if 'Added LC_LOAD_DYLIB' not in load_library_output.out:
@@ -518,10 +526,14 @@ class IosPatcher(BasePlatformPatcher):
                     fg='green')
         for dylib in dylibs_to_sign:
             click.secho('Code signing: {0}'.format(os.path.basename(dylib)), dim=True)
-            delegator.run('{0} {1} {2} {3}'.format(self.required_commands['codesign']['location'],
-                                                   '-f -v -s',
-                                                   codesign_signature,
-                                                   dylib))
+            delegator.run(list2cmdline([
+                self.required_commands['codesign']['location'],
+                '-f',
+                '-v',
+                '-s',
+                codesign_signature,
+                dylib])
+            )
 
     def archive_and_codesign(self, original_name: str, codesign_signature: str) -> None:
         """
@@ -552,16 +564,18 @@ class IosPatcher(BasePlatformPatcher):
         self.patched_codesigned_ipa_path = os.path.join(self.temp_directory, os.path.basename(
             '{0}-frida-codesigned.ipa'.format(original_name.strip('.ipa'))))
 
-        ipa_codesign = delegator.run(
-            '{0} -i {1} -m "{2}" -o "{3}" "{4}"'.format(
+        ipa_codesign = delegator.run(list2cmdline(
+            [
                 self.required_commands['applesign']['location'],
+                '-i',
                 codesign_signature,
+                '-m',
                 self.provision_file,
+                '-o',
                 self.patched_codesigned_ipa_path,
-                self.patched_ipa_path,
-            ),
-            timeout=self.command_run_timeout
-        )
+                self.patched_ipa_path
+            ]
+        ), timeout=self.command_run_timeout)
 
         click.secho(ipa_codesign.err, dim=True)
 
@@ -828,9 +842,13 @@ class AndroidPatcher(BasePlatformPatcher):
         """
 
         if not self.aapt:
-            o = delegator.run('{0} dump badging {1}'.format(
-                self.required_commands['aapt']['location'],
-                self.apk_source
+            o = delegator.run(list2cmdline(
+                [
+                    self.required_commands['aapt']['location'],
+                    'dump',
+                    'badging',
+                    self.apk_source
+                ]
             ), timeout=self.command_run_timeout)
 
             if len(o.err) > 0:
@@ -846,6 +864,10 @@ class AndroidPatcher(BasePlatformPatcher):
             Determines the class name for the activity that is
             launched on application startup.
 
+            This is done by first trying to parse the output of
+            aapt dump badging, then falling back to manually
+            parsing the AndroidManifest for activity-alias tags.
+
             :return:
         """
 
@@ -857,7 +879,44 @@ class AndroidPatcher(BasePlatformPatcher):
                 # ['launchable-activity: name=', 'com.app.activity', '  label=', 'bob']
                 activity = line.split('\'')[1]
 
-        return activity
+        # If we got the activity using aapt, great, return that.
+        if activity != '':
+            return activity
+
+        # if we dont have the activity yet, check out activity aliases
+
+        click.secho(('Unable to determine the launchable activity using aapt, trying '
+                     'to manually parse the AndroidManifest for activity aliases...'), dim=True, fg='yellow')
+
+        # Try and parse the manifest manually
+        manifest = self._get_android_manifest()
+        root = manifest.getroot()
+
+        # grab all of the activity-alias tags
+        for alias in root.findall('./application/activity-alias'):
+
+            # Take not of the current activity
+            current_activity = alias.get('{http://schemas.android.com/apk/res/android}targetActivity')
+            categories = alias.findall('./intent-filter/category')
+
+            # make sure we have categories for this alias
+            if categories is None:
+                continue
+
+            for category in categories:
+
+                # check if the name of this category is that of LAUNCHER
+                # its possible to have multiples, but once we determine one
+                # that fits we can just return and move on
+                category_name = category.get('{http://schemas.android.com/apk/res/android}name')
+
+                if category_name == 'android.intent.category.LAUNCHER':
+                    return current_activity
+
+        # getting here means we were unable to determine what the launchable
+        # activity is
+        click.secho('Unable to determine the launchable activity for this app.', fg='red')
+        raise Exception('Unable to determine launchable activity')
 
     def get_patched_apk_path(self) -> str:
         """
@@ -877,10 +936,15 @@ class AndroidPatcher(BasePlatformPatcher):
 
         click.secho('Unpacking {0}'.format(self.apk_source), dim=True)
 
-        o = delegator.run('{0} d -f {1} -o {2}'.format(
-            self.required_commands['apktool']['location'],
-            self.apk_source,
-            self.apk_temp_directory
+        o = delegator.run(list2cmdline(
+            [
+                self.required_commands['apktool']['location'],
+                'decode',
+                '-f',
+                '-o',
+                self.apk_temp_directory,
+                self.apk_source
+            ]
         ), timeout=self.command_run_timeout)
 
         if len(o.err) > 0:
@@ -991,7 +1055,7 @@ class AndroidPatcher(BasePlatformPatcher):
 
         # ensure we got a marker
         if len(inject_marker) <= 0:
-            raise Exception('Unable to determine position to inject a loadLibrary call', fg='red')
+            raise Exception('Unable to determine position to inject a loadLibrary call')
 
         # pick the first position for the inject. add one line as we
         # want to inject right be low the comment we matched
@@ -1036,10 +1100,14 @@ class AndroidPatcher(BasePlatformPatcher):
         """
 
         click.secho('Rebuilding the APK with the frida-gadget loaded...', fg='green', dim=True)
-        o = delegator.run('{0} b {1} -o {2}'.format(
-            self.required_commands['apktool']['location'],
-            self.apk_temp_directory,
-            self.apk_temp_frida_patched
+        o = delegator.run(list2cmdline(
+            [
+                self.required_commands['apktool']['location'],
+                'build',
+                self.apk_temp_directory,
+                '-o',
+                self.apk_temp_frida_patched
+            ]
         ), timeout=self.command_run_timeout)
 
         if len(o.err) > 0:
@@ -1064,13 +1132,19 @@ class AndroidPatcher(BasePlatformPatcher):
         here = os.path.abspath(os.path.dirname(__file__))
         keystore = os.path.join(here, 'assets', 'objection.jks')
 
-        o = delegator.run('{0} -sigalg SHA1withRSA -digestalg SHA1 -storepass {1} -keystore {2} {3} {4}'.format(
+        o = delegator.run(list2cmdline([
             self.required_commands['jarsigner']['location'],
+            '-sigalg',
+            'SHA1withRSA',
+            '-digestalg',
+            'SHA1',
+            '-storepass',
             'basil-joule-bug',
+            '-keystore',
             keystore,
             self.apk_temp_frida_patched,
-            'objection'
-        ))
+            'objection'])
+        )
 
         if len(o.err) > 0:
             click.secho('Signing the new APK may have failed.', fg='red')

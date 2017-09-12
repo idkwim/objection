@@ -1,9 +1,9 @@
 // Hooks an Objective-C class method and attempts to dump its
-// arguements as it is called.
+// arguments as it is called.
 
 var resolver = new ApiResolver('objc');
 var method = {};
-var argument_count = '{{ argument_count }}'
+var argument_count = '{{ argument_count }}';
 
 resolver.enumerateMatches('{{ method }}', {
     onMatch: function (match) {
@@ -46,7 +46,7 @@ if (method.address) {
                 // 2. The first arg
                 //
                 // For this reason do we adjust it by 2 positions
-                for (i=0; i < ac; i++) {
+                for (var i=0; i < ac; i++) {
 
                     var obj = ObjC.Object(args[i+2]);
                     var selector = split_method[i];

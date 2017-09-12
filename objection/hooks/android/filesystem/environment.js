@@ -10,15 +10,15 @@ var data = {
     externalCacheDirectory: context.getExternalCacheDir().getAbsolutePath().toString(),
     codeCacheDirectory: context.getCodeCacheDir().getAbsolutePath().toString(),
     obbDir: context.getObbDir().getAbsolutePath().toString(),
-    packageCodePath: context.getPackageCodePath().toString(),
-}
+    packageCodePath: context.getPackageCodePath().toString()
+};
 
 var response = {
     status: 'success',
     error_reason: NaN,
     type: 'environment-directories',
     data: data 
-}
+};
 
 send(JSON.stringify(response));
 
